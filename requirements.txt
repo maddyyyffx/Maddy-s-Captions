@@ -1,0 +1,4 @@
+flask
+faster-whisper
+deep-translator
+imageio-ffmpeg

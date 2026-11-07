@@ -1,0 +1,70 @@
+name: Build Maddy’s Captions
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Build app
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --windowed --name MaddysCaptions \
+            --collect-all faster_whisper --collect-all ctranslate2 \
+            --collect-all onnxruntime --collect-all av \
+            --collect-all imageio_ffmpeg \
+            maddys_captions.py
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/MaddysCaptions -DestinationPath MaddysCaptions-Windows.zip
+
+      - name: Package (Mac)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/MaddysCaptions.app MaddysCaptions-Mac.zip
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf MaddysCaptions-Linux.tar.gz -C dist MaddysCaptions
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MaddysCaptions-${{ runner.os }}
+          path: |
+            MaddysCaptions-Windows.zip
+            MaddysCaptions-Mac.zip
+            MaddysCaptions-Linux.tar.gz
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
